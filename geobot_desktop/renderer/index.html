@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GeoBot Desktop</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <main class="content-shell">
+        <header class="topbar panel-surface">
+          <div class="brand-block">
+            <div class="brand-chip">GeoBot Desktop</div>
+            <div class="brand-mark">GeoBot</div>
+            <div class="brand-subtitle">地理教学智能中枢</div>
+          </div>
+          <div class="hero-copy">
+            <div class="hero-kicker">Teaching Flow x QGIS</div>
+            <h1>聊天 + 模板 + QGIS 演示</h1>
+            <p>GeoBot 先做教学设计，再在需要时联动 QGIS 制图，并整合教案、地图和课件产物。</p>
+          </div>
+          <div class="topbar-side">
+            <div id="status-pills" class="status-pills"></div>
+            <div class="topbar-actions">
+              <button id="focus-qgis-button" class="secondary-button" type="button">聚焦 QGIS</button>
+              <button
+                id="toggle-status-button"
+                class="ghost-button status-toggle-button"
+                type="button"
+                aria-expanded="false"
+                aria-controls="status-drawer"
+              >
+                <span class="status-toggle-title">查看状态</span>
+                <span id="status-toggle-hint" class="status-toggle-hint">系统在线</span>
+              </button>
+            </div>
+          </div>
+        </header>
+
+        <section class="workspace-grid workspace-grid-wide">
+          <aside class="panel panel-surface template-panel">
+            <div class="section-header">
+              <div>
+                <div class="section-kicker">Templates</div>
+                <div class="panel-title">快捷地图模板</div>
+              </div>
+              <div class="section-note left-note">纯制图任务可直接走模板，完整教学任务请走聊天主流程。</div>
+            </div>
+            <div id="template-list" class="template-list"></div>
+          </aside>
+
+          <section class="panel panel-surface chat-panel">
+            <div class="section-header">
+              <div>
+                <div class="section-kicker">Chat</div>
+                <div class="panel-title">聊天区</div>
+              </div>
+              <div class="section-note left-note">输入教学需求，GeoBot 将按需求解析、教学设计、QGIS 地图、PPT 生成四阶段推进。</div>
+            </div>
+            <div id="chat-log" class="chat-log"></div>
+            <div class="composer">
+              <textarea id="chat-input" placeholder="例如：设计一节中国人口分布课，并生成教案、地图与 PPT。"></textarea>
+              <button id="chat-send-button" class="primary-button" type="button">发送需求</button>
+            </div>
+          </section>
+
+          <section class="panel panel-surface results-panel">
+            <div class="section-header">
+              <div>
+                <div class="section-kicker">Outputs</div>
+                <div class="panel-title">结果区</div>
+              </div>
+              <div id="result-summary" class="result-summary">系统在线，等待新任务</div>
+            </div>
+
+            <div class="workflow-section">
+              <div class="subsection-title">工作流阶段</div>
+              <div id="workflow-stages" class="workflow-stages"></div>
+            </div>
+
+            <div class="workflow-section">
+              <div class="subsection-title">结果预览</div>
+              <div id="artifact-preview" class="artifact-preview empty">暂无导出结果</div>
+            </div>
+
+            <div class="workflow-section">
+              <div class="subsection-title">产物列表</div>
+              <div id="artifact-list" class="artifact-list"></div>
+            </div>
+          </section>
+        </section>
+      </main>
+
+      <div id="status-drawer-backdrop" class="status-drawer-backdrop" hidden></div>
+      <aside id="status-drawer" class="status-drawer" aria-hidden="true" aria-labelledby="status-drawer-title">
+        <div class="status-drawer-header">
+          <div>
+            <div class="section-kicker">System</div>
+            <h2 id="status-drawer-title">状态中心</h2>
+          </div>
+          <button id="close-status-button" class="icon-button" type="button" aria-label="关闭状态中心">关闭</button>
+        </div>
+        <div id="drawer-job-summary" class="drawer-job-summary">系统在线，暂无执行中任务</div>
+        <section class="drawer-section">
+          <div class="drawer-section-title">系统状态</div>
+          <div id="status-cards" class="status-cards"></div>
+        </section>
+        <section class="drawer-section drawer-section-grow">
+          <div class="drawer-section-title">执行步骤</div>
+          <div id="job-steps-meta" class="job-steps-meta">暂无执行中任务</div>
+          <div id="job-steps" class="job-steps"></div>
+        </section>
+      </aside>
+    </div>
+    <script src="./app.js"></script>
+  </body>
+</html>

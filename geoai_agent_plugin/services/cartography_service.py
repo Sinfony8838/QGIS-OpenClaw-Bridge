@@ -5,6 +5,7 @@ from collections import OrderedDict
 from qgis.PyQt.QtCore import QVariant
 from qgis.PyQt.QtGui import QColor, QFont
 from qgis.core import (
+    Qgis,
     QgsFeature,
     QgsFillSymbol,
     QgsField,
@@ -40,6 +41,14 @@ from .session_utils import DEFAULT_CHART_SLOT, DEFAULT_LAYOUT_NAME
 
 
 class CartographyService(BaseGeoAIService):
+    def _resolve_label_placement(self, placement_name):
+        qgis_label_placement = getattr(Qgis, "LabelPlacement", None)
+        if qgis_label_placement and hasattr(qgis_label_placement, placement_name):
+            return getattr(qgis_label_placement, placement_name)
+        if hasattr(QgsPalLayerSettings, placement_name):
+            return getattr(QgsPalLayerSettings, placement_name)
+        raise AttributeError(f"Unsupported label placement: {placement_name}")
+
     def _apply_page_size(self, layout, paper_spec):
         if not hasattr(layout, "pageCollection"):
             return False
@@ -438,16 +447,16 @@ class CartographyService(BaseGeoAIService):
 
             placement_key = (placement or "").lower()
             if layer.geometryType() == QgsWkbTypes.LineGeometry:
-                settings.placement = QgsPalLayerSettings.Curved
+                settings.placement = self._resolve_label_placement("Curved")
             elif layer.geometryType() == QgsWkbTypes.PolygonGeometry:
-                settings.placement = QgsPalLayerSettings.OverPoint
+                settings.placement = self._resolve_label_placement("OverPoint")
             else:
-                settings.placement = QgsPalLayerSettings.OverPoint
+                settings.placement = self._resolve_label_placement("OverPoint")
 
             if placement_key == "line":
-                settings.placement = QgsPalLayerSettings.Line
+                settings.placement = self._resolve_label_placement("Line")
             elif placement_key == "horizontal":
-                settings.placement = QgsPalLayerSettings.Horizontal
+                settings.placement = self._resolve_label_placement("Horizontal")
 
             if isinstance(scale_visibility, (list, tuple)) and len(scale_visibility) == 2:
                 settings.scaleVisibility = True

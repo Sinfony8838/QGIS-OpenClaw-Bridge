@@ -1,0 +1,13 @@
+{
+  "name": "geobot-desktop",
+  "version": "0.1.0",
+  "description": "GeoBot desktop shell for QGIS-assisted geography teaching workflows.",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^31.0.0"
+  }
+}

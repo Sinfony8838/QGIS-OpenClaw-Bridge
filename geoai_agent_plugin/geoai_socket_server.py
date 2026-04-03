@@ -4,7 +4,7 @@ import threading
 
 from qgis.PyQt.QtCore import QObject, Qt, QThread, pyqtSignal, pyqtSlot
 
-from .services import AnalysisService, CartographyService, ExperimentalService, LayerService, TeachingService
+from .services import AnalysisService, CartographyService, ExperimentalService, LayerService, TeachingService, TerrainService
 from .services.response_utils import error_response, success_response
 
 
@@ -60,6 +60,8 @@ class GeoaiSocketServer(QObject):
         "create_population_density_map",
         "create_population_migration_map",
         "create_hu_line_comparison_map",
+        "create_terrain_profile",
+        "create_terrain_model",
     }
 
     def __init__(self, port=5555, iface=None, chart_preview_callback=None, execution_summary_callback=None):
@@ -80,8 +82,10 @@ class GeoaiSocketServer(QObject):
         self.analysis_service = AnalysisService(self)
         self.teaching_service = TeachingService(self)
         self.experimental_service = ExperimentalService(self)
+        self.terrain_service = TerrainService(self)
 
         self.handlers = {
+            "ping": self._ping,
             "get_layers": self.layer_service.get_layers,
             "run_python_code": self.experimental_service.run_python_code,
             "set_style": self.cartography_service.set_style,
@@ -118,6 +122,8 @@ class GeoaiSocketServer(QObject):
             "create_population_density_map": self.teaching_service.create_population_density_map,
             "create_population_migration_map": self.teaching_service.create_population_migration_map,
             "create_hu_line_comparison_map": self.teaching_service.create_hu_line_comparison_map,
+            "create_terrain_profile": self.terrain_service.create_terrain_profile,
+            "create_terrain_model": self.terrain_service.create_terrain_model,
         }
 
     def start(self):
@@ -231,6 +237,15 @@ class GeoaiSocketServer(QObject):
     def _update_banner(self, text):
         self.layer_service.push_banner(text)
         return success_response("Banner updated", data={"text": text})
+
+    def _ping(self):
+        return success_response(
+            "pong",
+            data={
+                "server": "GeoBot QGIS Plugin",
+                "port": self.port,
+            },
+        )
 
     def _query_attributes(self, **kwargs):
         from .services.query_service import query_attributes

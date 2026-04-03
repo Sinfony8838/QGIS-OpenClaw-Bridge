@@ -103,6 +103,22 @@ Runs a population attraction model and optionally registers the output into a se
 ### `style_population_attraction_result(layer_name|layer_id, field="score", style_mode="graduated", classes=5, color_ramp="Magma", color="#e76f51", map_session=None)`
 Styles the attraction-model result and optionally registers it into a session.
 
+### `create_terrain_profile(terrain_layer_name|terrain_layer_id, terrain_type="auto", elevation_field=None, profile_layer_name|profile_layer_id=None, profile_points=None, sample_distance=None, title="Terrain Profile", map_session=None)`
+Creates a terrain profile chart from a DEM raster or contour line layer.
+
+- `terrain_type="auto"` treats raster input as DEM and line input as contours.
+- Contour input requires `elevation_field` unless the plugin can auto-detect a suitable numeric field.
+- `profile_points` should contain at least two points in current project coordinates.
+- Returns a profile chart image in `artifacts.chart_image`, the line layer in `artifacts.profile_line_layer`, and a derived DEM in `artifacts.dem_layer` when contours are interpolated.
+
+### `create_terrain_model(terrain_layer_name|terrain_layer_id, terrain_type="auto", elevation_field=None, grid_spacing=None, vertical_exaggeration=1.5, create_hillshade=True, color_ramp="Terrain", title="Simplified Terrain Model", map_session=None)`
+Creates a simplified terrain visualization from a DEM raster or contour line layer.
+
+- Raster DEM input is used directly as the surface layer.
+- Contour input is interpolated to a DEM first and then styled.
+- When `create_hillshade=True`, the response includes `artifacts.hillshade_layer` if a hillshade output is generated.
+- `data.used_interpolation` indicates whether the tool had to derive a DEM from contour input.
+
 ## Teaching Templates
 
 ### `create_population_distribution_map(layer_name|layer_id, value_field, label_field=None, classes=5, mode="jenks", color_ramp="YlOrRd", title="Population Distribution Map", legend_title="Population Distribution", auto_layout=False, layout_name="GeoAI_Output", export_path=None, map_session=None, reference_layers=None, extent_mode="session_union")`

@@ -15,6 +15,9 @@ LAYER_PARAMETER_CLASS_TOKENS = (
     "MultipleLayers",
 )
 
+TERRAIN_SOURCE_KINDS = {"raster", "line"}
+TERRAIN_TYPES = {"auto", "dem", "contours"}
+
 
 def is_layer_parameter_definition(definition):
     if definition is None:
@@ -160,4 +163,65 @@ def layout_frame_for_paper(paper_size):
             "x": side_margin,
             "y": 8.0,
         },
+    }
+
+
+def normalize_terrain_type(terrain_type):
+    value = str(terrain_type or "auto").strip().lower()
+    if value not in TERRAIN_TYPES:
+        raise ValueError(f"Unsupported terrain_type: {terrain_type}")
+    return value
+
+
+def infer_terrain_source_kind(terrain_type, layer_kind):
+    normalized_type = normalize_terrain_type(terrain_type)
+    normalized_kind = str(layer_kind or "").strip().lower()
+    if normalized_kind not in TERRAIN_SOURCE_KINDS:
+        raise ValueError(f"Unsupported terrain layer kind: {layer_kind}")
+
+    if normalized_type == "auto":
+        return "dem" if normalized_kind == "raster" else "contours"
+
+    if normalized_type == "dem" and normalized_kind != "raster":
+        raise ValueError("terrain_type='dem' requires a raster terrain layer")
+    if normalized_type == "contours" and normalized_kind != "line":
+        raise ValueError("terrain_type='contours' requires a line terrain layer")
+    return normalized_type
+
+
+def default_profile_sample_distance(total_length, target_samples=80, minimum=1e-6):
+    length = float(total_length or 0.0)
+    if length <= 0:
+        raise ValueError("Profile length must be positive")
+
+    count = max(int(target_samples), 2)
+    return max(length / float(count - 1), float(minimum))
+
+
+def default_grid_spacing(extent_width, extent_height, target_cells=250, minimum=1e-6):
+    width = abs(float(extent_width or 0.0))
+    height = abs(float(extent_height or 0.0))
+    span = max(width, height)
+    if span <= 0:
+        raise ValueError("Terrain extent must be positive")
+
+    cells = max(int(target_cells), 1)
+    return max(span / float(cells), float(minimum))
+
+
+def summarize_profile_samples(samples):
+    rows = list(samples or [])
+    if not rows:
+        raise ValueError("Profile samples are required")
+
+    distances = [float(item["distance"]) for item in rows]
+    elevations = [float(item["elevation"]) for item in rows]
+    min_elevation = min(elevations)
+    max_elevation = max(elevations)
+    return {
+        "point_count": len(rows),
+        "total_distance": max(distances),
+        "min_elevation": min_elevation,
+        "max_elevation": max_elevation,
+        "relief": max_elevation - min_elevation,
     }

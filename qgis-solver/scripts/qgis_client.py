@@ -425,6 +425,60 @@ class QGISClient:
             map_session=map_session,
         )
 
+    def create_terrain_profile(
+        self,
+        terrain_layer_id=None,
+        terrain_layer_name=None,
+        terrain_type="auto",
+        elevation_field=None,
+        profile_layer_id=None,
+        profile_layer_name=None,
+        profile_points=None,
+        sample_distance=None,
+        title="Terrain Profile",
+        map_session=None,
+    ):
+        return self.call(
+            "create_terrain_profile",
+            terrain_layer_id=terrain_layer_id,
+            terrain_layer_name=terrain_layer_name,
+            terrain_type=terrain_type,
+            elevation_field=elevation_field,
+            profile_layer_id=profile_layer_id,
+            profile_layer_name=profile_layer_name,
+            profile_points=profile_points,
+            sample_distance=sample_distance,
+            title=title,
+            map_session=map_session,
+        )
+
+    def create_terrain_model(
+        self,
+        terrain_layer_id=None,
+        terrain_layer_name=None,
+        terrain_type="auto",
+        elevation_field=None,
+        grid_spacing=None,
+        vertical_exaggeration=1.5,
+        create_hillshade=True,
+        color_ramp="Terrain",
+        title="Simplified Terrain Model",
+        map_session=None,
+    ):
+        return self.call(
+            "create_terrain_model",
+            terrain_layer_id=terrain_layer_id,
+            terrain_layer_name=terrain_layer_name,
+            terrain_type=terrain_type,
+            elevation_field=elevation_field,
+            grid_spacing=grid_spacing,
+            vertical_exaggeration=vertical_exaggeration,
+            create_hillshade=create_hillshade,
+            color_ramp=color_ramp,
+            title=title,
+            map_session=map_session,
+        )
+
     # Teaching templates
     def create_population_distribution_map(
         self,

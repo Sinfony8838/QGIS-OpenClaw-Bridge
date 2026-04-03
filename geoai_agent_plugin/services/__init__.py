@@ -3,6 +3,7 @@ from .cartography_service import CartographyService
 from .experimental_service import ExperimentalService
 from .layer_service import LayerService
 from .teaching_service import TeachingService
+from .terrain_service import TerrainService
 
 __all__ = [
     "AnalysisService",
@@ -10,4 +11,5 @@ __all__ = [
     "ExperimentalService",
     "LayerService",
     "TeachingService",
+    "TerrainService",
 ]

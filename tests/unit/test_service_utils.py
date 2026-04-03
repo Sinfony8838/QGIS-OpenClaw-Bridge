@@ -10,6 +10,11 @@ MODULE_SPEC.loader.exec_module(SERVICE_UTILS)
 is_layer_parameter_definition = SERVICE_UTILS.is_layer_parameter_definition
 layout_frame_for_paper = SERVICE_UTILS.layout_frame_for_paper
 normalize_paper_size = SERVICE_UTILS.normalize_paper_size
+normalize_terrain_type = SERVICE_UTILS.normalize_terrain_type
+infer_terrain_source_kind = SERVICE_UTILS.infer_terrain_source_kind
+default_profile_sample_distance = SERVICE_UTILS.default_profile_sample_distance
+default_grid_spacing = SERVICE_UTILS.default_grid_spacing
+summarize_profile_samples = SERVICE_UTILS.summarize_profile_samples
 resolve_processing_inputs = SERVICE_UTILS.resolve_processing_inputs
 sort_and_limit_rows = SERVICE_UTILS.sort_and_limit_rows
 
@@ -91,6 +96,38 @@ class ServiceUtilsTest(unittest.TestCase):
         self.assertGreater(frame["paper"]["height"], frame["paper"]["width"])
         self.assertGreater(frame["map"]["height"], frame["legend"]["height"] - 1)
         self.assertGreater(frame["legend"]["x"], frame["map"]["x"])
+
+    def test_normalize_terrain_type_defaults_to_auto(self):
+        self.assertEqual(normalize_terrain_type(None), "auto")
+        self.assertEqual(normalize_terrain_type("DEM"), "dem")
+
+    def test_infer_terrain_source_kind_resolves_auto_and_validates_explicit_modes(self):
+        self.assertEqual(infer_terrain_source_kind("auto", "raster"), "dem")
+        self.assertEqual(infer_terrain_source_kind("auto", "line"), "contours")
+        self.assertEqual(infer_terrain_source_kind("contours", "line"), "contours")
+        with self.assertRaises(ValueError):
+            infer_terrain_source_kind("dem", "line")
+
+    def test_default_profile_sample_distance_targets_about_eighty_samples(self):
+        self.assertAlmostEqual(default_profile_sample_distance(790.0), 10.0)
+        self.assertGreater(default_profile_sample_distance(0.25), 0.0)
+
+    def test_default_grid_spacing_scales_from_extent(self):
+        self.assertAlmostEqual(default_grid_spacing(500.0, 200.0, target_cells=250), 2.0)
+
+    def test_summarize_profile_samples_returns_basic_relief_stats(self):
+        stats = summarize_profile_samples(
+            [
+                {"distance": 0.0, "elevation": 12.0},
+                {"distance": 5.0, "elevation": 20.5},
+                {"distance": 10.0, "elevation": 15.0},
+            ]
+        )
+        self.assertEqual(stats["point_count"], 3)
+        self.assertEqual(stats["total_distance"], 10.0)
+        self.assertEqual(stats["min_elevation"], 12.0)
+        self.assertEqual(stats["max_elevation"], 20.5)
+        self.assertEqual(stats["relief"], 8.5)
 
 
 if __name__ == "__main__":

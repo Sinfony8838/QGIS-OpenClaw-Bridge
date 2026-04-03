@@ -16,14 +16,17 @@ The preferred workflow is:
    - `create_population_density_map()`
    - `create_population_migration_map()`
    - `create_hu_line_comparison_map()`
-4. Use lower-level cartography tools only for targeted overrides:
+4. Use terrain tools when the task is about DEMs, contours, profiles, or simplified terrain visualization:
+   - `create_terrain_profile()`
+   - `create_terrain_model()`
+5. Use lower-level cartography tools only for targeted overrides:
    - `apply_graduated_renderer()`
    - `create_heatmap()`
    - `create_flow_arrows()`
    - `set_layer_labels()`
    - `customize_layout_legend()`
    - `embed_chart()`
-5. Export with `auto_layout()` and `export_map()` when you need a final artifact.
+6. Export with `auto_layout()` and `export_map()` when you need a final artifact.
 
 ## Session Rules
 
