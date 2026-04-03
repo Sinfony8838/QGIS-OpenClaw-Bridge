@@ -1,101 +1,121 @@
 # GeoBot
 
-GeoBot is a product wrapper for QGIS-assisted geography teaching. It keeps QGIS as the visible professional execution window, adds a local product runtime for project and job management, and hides the underlying orchestration engine behind a private adapter boundary.
+GeoBot 是一个面向地理教学与 GIS 实践的智能辅助教学项目。  
+它的目标不是把 QGIS 包装成一个单纯的“控制台”，而是把**教学设计、地图制作、课堂展示和教学产物生成**串成一个完整工作流。
 
-## Architecture
+当前版本采用本地桌面执行架构：
 
-The repository now contains three product-facing layers:
+- 教师在 `GeoBot Desktop` 中输入教学需求
+- `GeoBot Runtime` 负责项目、任务、产物和本地桥接
+- `QGIS Plugin` 负责专业制图与空间分析执行
+- 过渡阶段通过隐藏的 OpenClaw 工作流完成教学编排
+- 长期将迁移到专用内核 `GISclaw`
 
-- `geoai_agent_plugin/`
-  - QGIS plugin that exposes stable mapping and analysis tools over a local socket bridge, including terrain profile and simplified terrain-model outputs for DEM or contour data.
-- `geobot_runtime/`
-  - Local product runtime that manages projects, jobs, artifacts, outputs, QGIS connectivity, and template execution.
-- `geobot_desktop/`
-  - Electron desktop shell that talks only to `geobot_runtime` and does not expose orchestration-engine concepts in the UI.
+## 项目定位
 
-The runtime-facing flow is:
+GeoBot v1 的核心交付不是“单张地图”，而是：
+
+- 教学设计 / 教案
+- QGIS 制作的专题地图
+- 课堂展示材料
+- 后续可扩展的 PPT / 教学包
+
+QGIS 是 GeoBot 的一个重点能力，但不是全部。  
+项目真正要解决的是：**如何把教学意图转成可执行的教学流程和专业 GIS 演示**。
+
+## 当前能力
+
+目前仓库已经包含：
+
+- 本地 QGIS 插件与 socket 桥接
+- GeoBot 本地运行时
+- Electron 桌面端壳层
+- 面向 QGIS 的 `qgis-solver` 工具包
+- 教学地图模板与查询能力
+- 面向教学工作流的阶段化任务模型
+
+已支持的重点地图能力包括：
+
+- 分级设色
+- 热力图 / 密度图
+- 流向图
+- 胡焕庸线生成与对比
+- 标签、图例、属性查询
+- 地形剖面和简化地形表达
+
+## 仓库结构
+
+```text
+geoai_agent_plugin/   QGIS 插件，负责本地 GIS 执行
+geobot_runtime/       本地运行时，负责任务、产物、桥接与 API
+geobot_desktop/       Electron 桌面端
+qgis-solver/          QGIS 工具层与客户端封装
+scripts/              安装与启动脚本
+tests/                单元测试
+```
+
+## 当前架构
 
 ```text
 GeoBot Desktop
-  -> GeoBot Runtime (HTTP)
-  -> Hidden OpenClaw bridge (current transition engine)
-  -> qgis-solver / QGIS bridge protocol
+  -> GeoBot Runtime
+  -> Hidden teaching workflow engine (transition stage)
+  -> qgis-solver
   -> QGIS plugin socket
-  -> Exported maps and teaching artifacts
+  -> QGIS
+  -> Exported teaching artifacts
 ```
 
-## Product Goals
+当前过渡版本默认仍通过本地 OpenClaw 工作流运行教学编排，但桌面前台不会暴露 `agent / skill / session / subagent` 等内部概念。  
+后续计划用 `GISclaw` 替换这一层，而不改变桌面端和 QGIS 桥接层。
 
-- Hide `OpenClaw / agent / skill / session / subagent` terminology from teachers.
-- Keep QGIS available as the professional demonstration window.
-- Provide a stable product API around projects, jobs, templates, outputs, and health checks.
-- Let the desktop shell evolve independently from the hidden orchestration engine.
+## 本仓库包含什么
 
-## Runtime API
+本仓库包含：
 
-`geobot_runtime` exposes a local HTTP API on `127.0.0.1:18999` by default.
+- GeoBot 本地产品壳
+- QGIS 插件代码
+- 本地运行时代码
+- QGIS 工具层
+- 测试与启动脚本
 
-- `GET /health`
-  - Runtime, QGIS bridge, assistant-engine, and output-path status.
-- `GET /templates`
-  - Template definitions used by the desktop shell.
-- `POST /projects`
-  - Create a project context.
-- `GET /projects/{project_id}`
-  - Read project metadata and linked jobs.
-- `POST /chat`
-  - Submit a natural-language request. In this build, chat first tries the hidden OpenClaw bridge and falls back to local teaching templates when possible.
-- `POST /templates/{template_id}`
-  - Execute a standard teaching template directly through QGIS.
-- `GET /jobs/{job_id}`
-  - Read job status, steps, and result.
-- `GET /jobs/{job_id}/stream`
-  - Server-sent events stream for job updates.
-- `GET /artifacts/{artifact_id}`
-  - Read exported artifact metadata.
-- `GET /outputs?project_id=...`
-  - List exported outputs for a project.
-- `POST /qgis/focus`
-  - Bring the QGIS window to the foreground.
+本仓库**不包含**：
 
-## Included Teaching Templates
+- QGIS 安装本体
+- 用户本地 `.openclaw` 工作区中的私有配置
+- 模型 API Key 或个人凭证
+- 教师私有数据与教学资源
 
-- `population_distribution`
-  - Population choropleth map.
-- `population_density`
-  - Population heatmap or density map.
-- `population_migration`
-  - Population migration or flow map.
-- `hu_line_comparison`
-  - Classic Hu Huanyong line versus a line fitted from current data.
+## 快速开始
 
-## Quick Start
+### 1. 环境要求
 
-### 1. Install or update the QGIS plugin
+- Windows
+- QGIS 3.16+
+- Python 3.7+
+- Node.js
 
-Run:
+### 2. 安装或更新 QGIS 插件
 
 ```powershell
 .\scripts\install_geobot_plugin.ps1 -Force
 ```
 
-This copies `geoai_agent_plugin` into the QGIS profile plugin directory.
-
-### 2. Start the runtime
-
-Run:
+### 3. 启动 Runtime
 
 ```powershell
 .\scripts\run_geobot_runtime.ps1
 ```
 
-If you need to override the bind address, use `-RuntimeHost` instead of `-Host` because PowerShell reserves `$Host`.
+默认监听：
 
-The runtime will try to detect your existing local OpenClaw installation from `C:\Users\<you>\.openclaw\openclaw.json`.
+```text
+http://127.0.0.1:18999
+```
 
-### 3. Start the desktop shell
+### 4. 启动 Desktop
 
-Run:
+首次需要安装前端依赖：
 
 ```powershell
 cd .\geobot_desktop
@@ -104,47 +124,49 @@ cd ..
 .\scripts\run_geobot_desktop.ps1
 ```
 
-If Python is not on your `PATH`, set `GEOBOT_PYTHON`. If QGIS is installed in a non-standard location, set `GEOBOT_QGIS_EXE`.
+### 5. 过渡版额外要求
 
-For chat-driven execution in this transition build, you also need:
+如果你要使用当前的“聊天驱动教学工作流”，还需要：
 
-- an existing local OpenClaw installation
-- a working `.openclaw\workspace\skills\qgis-solver`
-- `npm install` completed inside `geobot_desktop/` so the hidden Electron bridge is available
+- 本机已有可运行的 OpenClaw
+- 本机已有可用的 `qgis-solver`
+- QGIS 已启动并加载 `geoai_agent_plugin`
 
-## Product Runtime Directories
+## 运行时接口
 
-GeoBot uses private runtime directories under `%AppData%\GeoBot\`:
+`geobot_runtime` 默认提供本地 HTTP 接口：
 
-- `runtime/`
-- `workspace/`
-- `outputs/`
-- `logs/`
+- `GET /health`
+- `GET /templates`
+- `POST /projects`
+- `GET /projects/{project_id}`
+- `POST /chat`
+- `POST /templates/{template_id}`
+- `GET /jobs/{job_id}`
+- `GET /jobs/{job_id}/stream`
+- `GET /artifacts/{artifact_id}`
+- `GET /outputs`
+- `POST /qgis/focus`
 
-These directories are separate from `.openclaw` and are intended to be the only product-visible runtime paths.
+## 开发状态
 
-## Current Scope
+当前仓库更接近 **GeoBot v1 原型 / 过渡版**，已经能跑通：
 
-Implemented in this repository:
+- 教学需求输入
+- 本地工作流任务调度
+- QGIS 地图制作
+- 查询型任务结果回收
+- 桌面端状态与产物展示
 
-- Product runtime package and local HTTP API
-- QGIS bridge client and template executor
-- Desktop shell scaffold
-- Terrain profile and simplified terrain-model tools in the QGIS plugin
-- Project, job, and artifact store
-- Hidden OpenClaw bridge with runtime-managed health checks and chat fallback
-- Installer and launch scripts
+仍在持续完善：
 
-Not finished in this build:
+- `teacher_flow` 的正式产品化输出契约
+- PPT 生成链路
+- 更多教学模板
+- Windows 安装器
+- 用 `GISclaw` 替换过渡期 OpenClaw 编排层
 
-- Replacing OpenClaw with GISclaw as the long-term engine
-- Windows installer packaging
-- Automatic QGIS plugin update checks
-- Complete desktop workflow forms for every template parameter
-
-## Tests
-
-Run:
+## 测试
 
 ```powershell
 python -m unittest `
@@ -153,16 +175,24 @@ python -m unittest `
   tests.unit.test_geobot_runtime_config `
   tests.unit.test_geobot_runtime_store `
   tests.unit.test_geobot_templates `
-  tests.unit.test_openclaw_engine
+  tests.unit.test_openclaw_engine `
+  tests.unit.test_qgis_client
 ```
 
-## Requirements
+## 路线图
 
-- Windows
-- QGIS 3.16+
-- Python 3.7+
-- Node.js for the Electron shell
+短期目标：
+
+- 稳定教学工作流
+- 完善地图、教案、PPT 三类产物
+- 继续隐藏底层编排引擎
+
+长期目标：
+
+- 建立云端知识库和模型网关
+- 把 OpenClaw 过渡为 `GISclaw`
+- 将 GeoBot 做成可交付给教师的正式桌面产品
 
 ## License
 
-MIT License
+This project is licensed under the MIT License. See [LICENSE](LICENSE).

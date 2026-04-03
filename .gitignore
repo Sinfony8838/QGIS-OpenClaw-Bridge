@@ -10,7 +10,9 @@ node_modules/
 
 dist/
 build/
+coverage/
 
 *.log
+Thumbs.db
 
 tmp_openclaw_bundle.js
