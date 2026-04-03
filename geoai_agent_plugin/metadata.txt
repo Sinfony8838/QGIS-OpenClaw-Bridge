@@ -1,0 +1,17 @@
+[general]
+name=GeoAI Agent Console
+description=A professional bridge connecting OpenClaw and other AI agents with QGIS via a high-performance socket server.
+about=This plugin transforms QGIS into a powerful 'Spatial Skill' for AI Agents. It provides a dedicated socket server to receive and execute complex PyQGIS operations from OpenClaw, supporting automated buffer analysis, categorized styling, and standard map production.
+version=1.0.0
+author=Zhang Chengyi (ZCYXN)
+email=238634801+Sinfony8838@users.noreply.github.com
+repository=https://github.com/Sinfony8838/GeoAI-Bridge
+qgisMinimumVersion=3.16
+qgisMaximumVersion=3.99
+category=Plugins
+icon=icon.png
+experimental=False
+tags=OpenClaw, AI Agent, LLM, GeoAI, Automation, Skill
+
+[about]
+about=GeoAI Agent Console is specifically optimized for the OpenClaw ecosystem. By exposing QGIS core capabilities as standardized 'Skills', it enables LLM Agents to perform professional-grade GIS tasks—such as CRS-aware zooming, automated categorized rendering, and memory-layer visualization—entirely through natural language or automated workflows.
