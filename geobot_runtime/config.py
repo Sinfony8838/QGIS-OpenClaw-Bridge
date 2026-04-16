@@ -5,7 +5,7 @@ import os
 import secrets
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 
 def _default_app_root() -> Path:
@@ -86,8 +86,11 @@ class RuntimeConfig:
     assistant_engine: str = field(default_factory=lambda: os.getenv("GEOBOT_ASSISTANT_ENGINE", "openclaw").strip().lower() or "openclaw")
     assistant_fallback_templates: bool = field(default_factory=lambda: _as_bool(os.getenv("GEOBOT_ASSISTANT_FALLBACK_TEMPLATES", "1"), default=True))
     openclaw_bridge_mode: str = field(default_factory=lambda: os.getenv("GEOBOT_OPENCLAW_BRIDGE_MODE", "hidden-automation").strip().lower() or "hidden-automation")
-    openclaw_bridge_timeout_ms: int = field(default_factory=lambda: int(os.getenv("GEOBOT_OPENCLAW_BRIDGE_TIMEOUT_MS", "180000")))
+    openclaw_bridge_timeout_ms: int = field(default_factory=lambda: int(os.getenv("GEOBOT_OPENCLAW_BRIDGE_TIMEOUT_MS", "420000")))
     desktop_automation_bridge_url: str = field(default_factory=lambda: os.getenv("GEOBOT_AUTOMATION_BRIDGE_URL", "http://127.0.0.1:19091").strip())
+    population_showcase_mode: str = field(default_factory=lambda: os.getenv("GEOBOT_POPULATION_SHOWCASE_MODE", "population_unit").strip().lower() or "population_unit")
+    population_knowledge_root: Optional[Path] = None
+    population_dataset_manifest_path: Optional[Path] = None
 
     def __post_init__(self) -> None:
         self.project_root = Path(__file__).resolve().parents[1]
@@ -107,6 +110,16 @@ class RuntimeConfig:
         self.ppt_studio_skill_dir = self.openclaw_workspace_dir / "skills" / "ppt-studio"
         self.electron_executable = _detect_electron_executable(self.project_root)
         self.openclaw_helper_script = self.project_root / "geobot_runtime" / "openclaw_bridge_helper.js"
+        if self.population_knowledge_root is None:
+            env_root = os.getenv("GEOBOT_POPULATION_KNOWLEDGE_ROOT", "").strip()
+            self.population_knowledge_root = Path(env_root) if env_root else self.openclaw_workspace_dir / "knowledge" / "geography" / "population"
+        else:
+            self.population_knowledge_root = Path(self.population_knowledge_root)
+        if self.population_dataset_manifest_path is None:
+            env_manifest = os.getenv("GEOBOT_POPULATION_MANIFEST_PATH", "").strip()
+            self.population_dataset_manifest_path = Path(env_manifest) if env_manifest else self.runtime_dir / "population_dataset_manifest.json"
+        else:
+            self.population_dataset_manifest_path = Path(self.population_dataset_manifest_path)
 
         if not self.openclaw_gateway_url or not self.openclaw_gateway_token:
             self._hydrate_openclaw_settings_from_local_config()
@@ -124,6 +137,7 @@ class RuntimeConfig:
             path.mkdir(parents=True, exist_ok=True)
         self._write_runtime_manifest()
         self._write_private_openclaw_config()
+        self._write_population_dataset_manifest()
 
     def project_output_dir(self, project_id: str) -> Path:
         path = self.outputs_dir / project_id
@@ -174,6 +188,11 @@ class RuntimeConfig:
                 "helper_script": str(self.openclaw_helper_script),
                 "electron_executable": self.electron_executable,
             },
+            "population_showcase": {
+                "mode": self.population_showcase_mode,
+                "knowledge_root": str(self.population_knowledge_root),
+                "dataset_manifest_path": str(self.population_dataset_manifest_path),
+            },
         }
         (self.runtime_dir / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -198,3 +217,12 @@ class RuntimeConfig:
             },
         }
         (self.openclaw_dir / "openclaw.private.json").write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    def _write_population_dataset_manifest(self) -> None:
+        from .population_unit import build_population_dataset_manifest
+
+        build_population_dataset_manifest(
+            knowledge_root=self.population_knowledge_root,
+            manifest_path=self.population_dataset_manifest_path,
+            showcase_mode=self.population_showcase_mode,
+        )

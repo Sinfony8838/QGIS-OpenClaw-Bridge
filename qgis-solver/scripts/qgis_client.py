@@ -47,6 +47,12 @@ class QGISClient:
     def zoom_to_layer(self, layer_id=None, layer_name=None):
         return self.call("zoom_to_layer", layer_id=layer_id, layer_name=layer_name)
 
+    def set_layer_visibility(self, layer_id=None, layer_name=None, visible=True):
+        return self.call("set_layer_visibility", layer_id=layer_id, layer_name=layer_name, visible=visible)
+
+    def set_active_layer(self, layer_id=None, layer_name=None):
+        return self.call("set_active_layer", layer_id=layer_id, layer_name=layer_name)
+
     def update_banner(self, text):
         return self.call("update_banner", text=text)
 
@@ -145,6 +151,12 @@ class QGISClient:
     # Cartography
     def set_style(self, layer_id=None, layer_name=None, style_type="single", map_session=None, **properties):
         return self.call("set_style", layer_id=layer_id, layer_name=layer_name, style_type=style_type, map_session=map_session, **properties)
+
+    def set_layer_style(self, layer_id=None, layer_name=None, style_type="single", map_session=None, **properties):
+        return self.set_style(layer_id=layer_id, layer_name=layer_name, style_type=style_type, map_session=map_session, **properties)
+
+    def get_layer_style(self, layer_id=None, layer_name=None):
+        return self.call("get_layer_style", layer_id=layer_id, layer_name=layer_name)
 
     def apply_graduated_renderer(
         self,
@@ -292,6 +304,7 @@ class QGISClient:
         self,
         layer_id=None,
         layer_name=None,
+        enabled=True,
         field=None,
         expression=None,
         font="Arial",
@@ -307,6 +320,7 @@ class QGISClient:
             "set_layer_labels",
             layer_id=layer_id,
             layer_name=layer_name,
+            enabled=enabled,
             field=field,
             expression=expression,
             font=font,

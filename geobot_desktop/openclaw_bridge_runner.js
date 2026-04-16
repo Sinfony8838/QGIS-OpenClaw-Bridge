@@ -49,6 +49,30 @@ function extractResultBlock(text) {
   return parsed;
 }
 
+function extractTextDelta(currentText, baselineText) {
+  const current = String(currentText || "");
+  const baseline = String(baselineText || "");
+  if (!baseline) {
+    return current;
+  }
+  if (!current || current === baseline) {
+    return "";
+  }
+  if (current.startsWith(baseline)) {
+    return current.slice(baseline.length);
+  }
+  const baselineIndex = current.lastIndexOf(baseline);
+  if (baselineIndex >= 0) {
+    return current.slice(baselineIndex + baseline.length);
+  }
+  const maxPrefix = Math.min(current.length, baseline.length);
+  let prefixLength = 0;
+  while (prefixLength < maxPrefix && current[prefixLength] === baseline[prefixLength]) {
+    prefixLength += 1;
+  }
+  return current.slice(prefixLength);
+}
+
 function isPlaceholderValue(value) {
   if (value === null || value === undefined) {
     return true;
@@ -58,6 +82,9 @@ function isPlaceholderValue(value) {
 }
 
 function sanitizeStructuredResult(structured, exportPath) {
+  if (!structured || typeof structured !== "object") {
+    return null;
+  }
   const result = { ...(structured || {}) };
   if (isPlaceholderValue(result.summary)) {
     result.summary = "";
@@ -71,7 +98,51 @@ function sanitizeStructuredResult(structured, exportPath) {
   if (isPlaceholderValue(result.export_path)) {
     result.export_path = "";
   }
+  if (isPlaceholderValue(result.request_id)) {
+    result.request_id = "";
+  }
+  const verification = result.verification && typeof result.verification === "object" ? { ...result.verification } : {};
+  result.verification = {
+    status: isPlaceholderValue(verification.status) ? "" : String(verification.status).trim(),
+    checked_layers: Array.isArray(verification.checked_layers) ? verification.checked_layers : [],
+    expected_style: verification.expected_style && typeof verification.expected_style === "object" ? verification.expected_style : {},
+    observed_style: verification.observed_style && typeof verification.observed_style === "object" ? verification.observed_style : {},
+    mismatches: Array.isArray(verification.mismatches) ? verification.mismatches : [],
+  };
   return result;
+}
+
+function matchesStructuredRequest(structured, requestId) {
+  if (!structured) {
+    return false;
+  }
+  const expected = String(requestId || "").trim();
+  if (!expected) {
+    return true;
+  }
+  return String(structured.request_id || "").trim() === expected;
+}
+
+function isVerifiedStructuredResult(structured, workflowMode) {
+  const mode = String(structured?.workflow_type || workflowMode || "").trim().toLowerCase();
+  if (mode !== "qgis_only") {
+    return true;
+  }
+  return String(structured?.verification?.status || "").trim().toLowerCase() === "verified";
+}
+
+function successStepsForWorkflow(isLessonWorkflow, summary) {
+  if (isLessonWorkflow) {
+    return [
+      { title: "解析教学请求", detail: "已将请求转发到隐藏的教学引擎。", status: "success" },
+      { title: "已获取结构化教学蓝图", detail: summary || "已收到最终 GEOBOT_RESULT 结果块。", status: "success" },
+    ];
+  }
+  return [
+    { title: "解析 QGIS 请求", detail: "已将请求转发到隐藏的 QGIS 执行引擎。", status: "success" },
+    { title: "调用 QGIS", detail: "OpenClaw 已通过 qgis-solver 操作当前 QGIS 项目。", status: "success" },
+    { title: "已获取最终结果", detail: summary || "已收到最终结果块。", status: "success" },
+  ];
 }
 
 function normalizeGatewayStorageUrl(rawUrl, fallbackUrl = "") {
@@ -137,7 +208,7 @@ async function clickNewSession(window) {
         return style.display !== "none" && style.visibility !== "hidden" && (element.offsetWidth > 0 || element.offsetHeight > 0 || element.getClientRects().length > 0);
       };
       const candidates = Array.from(document.querySelectorAll("button,[role='button']")).filter(visible);
-      const button = candidates.find((item) => /new session|新建会话|新会话/i.test((item.innerText || item.textContent || "").trim()));
+      const button = candidates.find((item) => /new session/i.test((item.innerText || item.textContent || "").trim()));
       if (!button) {
         return { ok: true, clicked: false };
       }
@@ -218,7 +289,7 @@ async function submitPrompt(window, prompt) {
         const label = [item.innerText, item.textContent, item.getAttribute("aria-label"), item.getAttribute("title")]
           .filter(Boolean)
           .join(" ");
-        return /send|发送|提交/i.test(label);
+        return /send|submit/i.test(label);
       });
       if (sendButton) {
         sendButton.click();
@@ -343,9 +414,17 @@ async function runOpenClawAutomation(request) {
   const gatewayToken = request.gatewayToken || "";
   const prompt = request.prompt || "";
   const exportPath = request.exportPath || "";
+  const lessonPlanPath = request.lessonPlanPath || "";
+  const pptxPath = request.pptxPath || "";
   const timeoutMs = Number(request.timeoutMs || 180000);
   const forceNewSession = request.forceNewSession === true;
   const requiresExport = request.requiresExport === true;
+  const requestId = String(request.requestId || "").trim();
+  const isLessonWorkflow = ["lesson_ppt", "teacher_flow", "full_flow"].includes(String(request.workflowMode || "").toLowerCase());
+  const isQgisOnlyWorkflow = String(request.workflowMode || "").toLowerCase() === "qgis_only";
+  const sessionPartition = forceNewSession
+    ? `geobot-openclaw-${Date.now()}-${Math.random().toString(16).slice(2)}`
+    : "persist:geobot-openclaw";
 
   if (!chatUrl || !prompt) {
     return buildError("Missing chatUrl or prompt");
@@ -359,7 +438,7 @@ async function runOpenClawAutomation(request) {
       contextIsolation: true,
       sandbox: false,
       backgroundThrottling: false,
-      partition: "persist:geobot-openclaw",
+      partition: sessionPartition,
     },
   });
 
@@ -377,7 +456,7 @@ async function runOpenClawAutomation(request) {
         gatewayToken
       );
       if (!seeded || !seeded.ok) {
-        return buildError("Failed to seed OpenClaw authentication state", {
+        return buildError("写入 OpenClaw 鉴权状态失败", {
           details: seeded && seeded.message ? seeded.message : "",
         });
       }
@@ -398,13 +477,17 @@ async function runOpenClawAutomation(request) {
 
     const composer = await waitForComposer(window, 30000);
     if (!composer || !composer.ok) {
-      return buildError("OpenClaw chat composer was not found");
+      return buildError("未找到 OpenClaw 输入框");
     }
 
     const submit = await submitPrompt(window, prompt);
     if (!submit || !submit.ok) {
-      return buildError("Failed to submit prompt to OpenClaw");
+      return buildError("向 OpenClaw 提交请求失败");
     }
+
+    await delay(1200);
+    const submittedSnapshot = await getPageText(window);
+    const submittedBaselineText = (submittedSnapshot && submittedSnapshot.text) || "";
 
     let stableCount = 0;
     let lastText = "";
@@ -414,12 +497,22 @@ async function runOpenClawAutomation(request) {
     while (Date.now() < endAt) {
       const snapshot = await getPageText(window);
       const text = (snapshot && snapshot.text) || "";
-      const structured = sanitizeStructuredResult(extractResultBlock(text), exportPath);
+      const responseText = extractTextDelta(text, submittedBaselineText);
+      const structured = sanitizeStructuredResult(extractResultBlock(responseText), exportPath);
+      const matchesRequest = matchesStructuredRequest(structured, requestId);
+      const verificationSatisfied = isVerifiedStructuredResult(structured, request.workflowMode);
       const resolvedExportPath = structured && structured.export_path ? structured.export_path : exportPath;
       const exportExists = resolvedExportPath ? fs.existsSync(resolvedExportPath) : false;
-      const hasStructuredSuccess = !!(structured && structured.status !== "error" && (structured.summary || structured.notes || structured.export_path));
-      if (structured && structured.status === "error") {
-        return buildError(structured.summary || structured.message || "OpenClaw reported an execution failure", {
+      const hasStructuredSuccess = !!(
+        structured &&
+        matchesRequest &&
+        structured.status !== "error" &&
+        verificationSatisfied &&
+        (structured.summary || structured.notes || structured.export_path)
+      );
+      if (structured && matchesRequest && structured.status === "error") {
+        return buildError(structured.summary || structured.message || "OpenClaw 执行失败", {
+          request_id: structured.request_id || requestId,
           export_path: structured.export_path || "",
           template_id: structured.template_id || null,
           notes: structured.notes || "",
@@ -430,7 +523,8 @@ async function runOpenClawAutomation(request) {
       if (hasStructuredSuccess && (!requiresExport || exportExists)) {
         return {
           status: structured.status || "success",
-          summary: structured.summary || structured.message || structured.assistant_message || "OpenClaw completed the task.",
+          request_id: structured.request_id || requestId,
+          summary: structured.summary || structured.message || structured.assistant_message || "OpenClaw 已完成任务。",
           assistant_message: structured.assistant_message || structured.summary || "",
           export_path: exportExists ? resolvedExportPath : (structured.export_path || ""),
           template_id: structured.template_id || null,
@@ -438,12 +532,12 @@ async function runOpenClawAutomation(request) {
           workflow_type: structured.workflow_type || request.workflowMode || "",
           stages: structured.stages || {},
           artifacts: structured.artifacts || {},
-          steps: [
-            { title: "Analyzing teaching request", detail: "Forwarded the request to the hidden assistant engine.", status: "success" },
-            { title: "Calling QGIS", detail: "OpenClaw used the QGIS bridge in the background.", status: "success" },
-            { title: "Captured final result", detail: structured.summary || "Received the final result block.", status: structured.status === "error" ? "error" : "success" },
-          ],
-          transcript_tail: text.slice(-4000),
+          verification: structured.verification || {},
+          package_contract: structured.package_contract || null,
+          lesson_payload: structured.lesson_payload || null,
+          slide_contract: structured.slide_contract || [],
+          steps: successStepsForWorkflow(isLessonWorkflow, structured.summary || "已收到最终结果块。"),
+          transcript_tail: responseText.slice(-4000),
         };
       }
 
@@ -455,12 +549,12 @@ async function runOpenClawAutomation(request) {
       }
 
       const elapsedMs = Date.now() - startAt;
-      const recentText = text.slice(-12000);
+      const recentText = (responseText || text).slice(-12000);
       if (!nudgeSent && !hasStructuredSuccess && stableCount >= 4 && elapsedMs >= 12000 && shouldSendExecutionNudge(recentText)) {
         await submitPrompt(
           window,
-          request.workflowMode === "teacher_flow"
-            ? "Do not greet, do not ask questions, and do not start a fresh conversation. Execute the existing GeoBot request now through teacher_flow and return the required GEOBOT_RESULT block when finished."
+          isLessonWorkflow
+            ? "Do not greet, do not ask questions, and do not start a fresh conversation. Execute the existing GeoBot request now through lesson_ppt and return the required GEOBOT_RESULT block when finished."
             : "Do not greet, do not ask questions, and do not start a fresh conversation. Execute the existing GeoBot request now through qgis-solver and return the required GEOBOT_RESULT block when finished."
         );
         nudgeSent = true;
@@ -469,17 +563,17 @@ async function runOpenClawAutomation(request) {
         continue;
       }
 
-      if (exportPath && fs.existsSync(exportPath) && stableCount >= 3) {
+      if (!isQgisOnlyWorkflow && exportPath && fs.existsSync(exportPath) && stableCount >= 3) {
         return {
           status: "success",
-          summary: "OpenClaw completed the task and exported a map artifact.",
+          summary: "OpenClaw 已完成任务并生成地图导出结果。",
           export_path: exportPath,
           template_id: null,
-          notes: "No structured result block was detected, but the export file exists.",
+          notes: "未检测到结构化结果块，但预期导出文件已生成。",
           steps: [
-            { title: "Analyzing teaching request", detail: "Forwarded the request to the hidden assistant engine.", status: "success" },
-            { title: "Calling QGIS", detail: "OpenClaw used the QGIS bridge in the background.", status: "success" },
-            { title: "Export detected", detail: "The expected export file was created.", status: "success" },
+            { title: "解析 QGIS 请求", detail: "已将请求转发到隐藏的 QGIS 执行引擎。", status: "success" },
+            { title: "调用 QGIS", detail: "OpenClaw 已通过 qgis-solver 操作当前 QGIS 项目。", status: "success" },
+            { title: "检测到导出结果", detail: "已生成预期的导出文件。", status: "success" },
           ],
           transcript_tail: text.slice(-4000),
         };
@@ -488,7 +582,59 @@ async function runOpenClawAutomation(request) {
       await delay(1500);
     }
 
+    const lessonPlanExists = lessonPlanPath && fs.existsSync(lessonPlanPath);
+    const pptxExists = pptxPath && fs.existsSync(pptxPath);
+    if (isLessonWorkflow && (lessonPlanExists || pptxExists)) {
+      const artifacts = {};
+      if (lessonPlanExists) {
+        artifacts.lesson_plan = {
+          artifact_type: "lesson_plan",
+          title: "Lesson Plan",
+          path: lessonPlanPath,
+        };
+      }
+      if (pptxExists) {
+        artifacts.pptx = {
+          artifact_type: "pptx",
+          title: "Teaching Slides",
+          path: pptxPath,
+        };
+      }
+      return {
+        status: "success",
+        summary: lessonPlanExists && pptxExists
+          ? "Lesson plan and PPT files were created, but OpenClaw timed out before returning the final result block."
+          : lessonPlanExists
+          ? "Lesson plan was created, but OpenClaw timed out before the PPT workflow completed."
+          : "PPT file was created, but OpenClaw timed out before the lesson workflow returned the final result block.",
+        assistant_message: lessonPlanExists && pptxExists
+          ? "Lesson plan and PPT were generated, but OpenClaw timed out before returning the final result block."
+          : lessonPlanExists
+          ? "Lesson plan was generated, but the PPT workflow timed out before returning the final result block."
+          : "PPT was generated, but the lesson workflow timed out before returning the final result block.",
+        export_path: "",
+        template_id: null,
+        notes: "Recovered from OpenClaw timeout by detecting generated lesson artifacts.",
+        workflow_type: request.workflowMode || "",
+        stages: {
+          analysis: { status: "success", summary: "Parsed the teaching request.", detail: "" },
+          design: { status: lessonPlanExists ? "success" : "warning", summary: lessonPlanExists ? "Lesson plan file was generated." : "Lesson plan file was not generated before timeout.", detail: "" },
+          map: { status: "skipped", summary: "QGIS execution is disabled in lesson_ppt mode.", detail: "" },
+          presentation: { status: pptxExists ? "success" : "warning", summary: pptxExists ? "PPT file was generated." : "PPT generation did not finish before timeout.", detail: "" },
+        },
+        artifacts,
+        lesson_payload: null,
+        slide_contract: [],
+        steps: [
+          { title: "Analyzing teaching request", detail: "Forwarded the request to the hidden assistant engine.", status: "success" },
+          { title: "Recovered lesson artifacts", detail: lessonPlanExists && pptxExists ? "Detected generated lesson plan and PPT files after timeout." : lessonPlanExists ? "Detected generated lesson plan after timeout." : "Detected generated PPT after timeout.", status: "warning" },
+        ],
+        transcript_tail: (lastText || "").slice(-4000),
+      };
+    }
+
     return buildError("Timed out while waiting for OpenClaw to finish the task", {
+      request_id: requestId,
       transcript_tail: lastText.slice(-4000),
       export_path: exportPath && fs.existsSync(exportPath) ? exportPath : "",
     });

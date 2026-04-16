@@ -41,6 +41,91 @@ from .session_utils import DEFAULT_CHART_SLOT, DEFAULT_LAYOUT_NAME
 
 
 class CartographyService(BaseGeoAIService):
+    @staticmethod
+    def _normalize_color_value(value):
+        if isinstance(value, QColor):
+            return value.name().upper() if value.isValid() else ""
+        text = str(value or "").strip()
+        if not text:
+            return ""
+        color = QColor(text)
+        if not color.isValid() and "," in text:
+            parts = [segment.strip() for segment in text.split(",")]
+            if len(parts) in {3, 4} and all(part.isdigit() for part in parts):
+                numbers = [int(part) for part in parts]
+                color = QColor(*numbers)
+        return color.name().upper() if color.isValid() else text.upper()
+
+    @staticmethod
+    def _normalize_style_properties(properties, geom_type):
+        alias_map = {
+            "fill_color": "color",
+            "stroke_color": "outline_color",
+            "stroke_width": "outline_width",
+            "line_color": "color",
+            "line_width": "width",
+        }
+        normalized = {}
+        for key, value in (properties or {}).items():
+            if value is None:
+                continue
+            text_value = str(value).strip()
+            if not text_value:
+                continue
+            normalized_key = alias_map.get(str(key), str(key))
+            normalized[normalized_key] = text_value
+
+        if geom_type == QgsWkbTypes.LineGeometry:
+            if "outline_color" in normalized and "color" not in normalized:
+                normalized["color"] = normalized.pop("outline_color")
+            if "outline_width" in normalized and "width" not in normalized:
+                normalized["width"] = normalized.pop("outline_width")
+
+        return normalized
+
+    def _serialize_symbol_style(self, symbol, geom_type):
+        symbol_layer = symbol.symbolLayer(0) if symbol and symbol.symbolLayerCount() else None
+        properties = symbol_layer.properties() if symbol_layer and hasattr(symbol_layer, "properties") else {}
+
+        fill_color = ""
+        line_color = ""
+        outline_color = ""
+        if geom_type == QgsWkbTypes.PolygonGeometry:
+            fill_color = self._normalize_color_value(properties.get("color") or symbol.color())
+            outline_color = self._normalize_color_value(properties.get("outline_color"))
+        elif geom_type == QgsWkbTypes.LineGeometry:
+            line_color = self._normalize_color_value(properties.get("line_color") or properties.get("color") or symbol.color())
+        elif geom_type == QgsWkbTypes.PointGeometry:
+            fill_color = self._normalize_color_value(properties.get("color") or symbol.color())
+            outline_color = self._normalize_color_value(properties.get("outline_color"))
+
+        line_width = (
+            properties.get("line_width")
+            or properties.get("outline_width")
+            or properties.get("width")
+            or ""
+        )
+        try:
+            line_width = float(line_width) if line_width not in {"", None} else 0.0
+        except Exception:
+            line_width = 0.0
+
+        renderer_type = ""
+        if symbol and hasattr(symbol, "type"):
+            try:
+                renderer_type = symbol.type()
+            except Exception:
+                renderer_type = ""
+
+        return {
+            "renderer_type": renderer_type or "single_symbol",
+            "fill_color": fill_color,
+            "outline_color": outline_color,
+            "line_color": line_color,
+            "line_width": line_width,
+            "opacity": float(symbol.opacity()) if symbol and hasattr(symbol, "opacity") else 1.0,
+        }
+
     def _resolve_label_placement(self, placement_name):
         qgis_label_placement = getattr(Qgis, "LabelPlacement", None)
         if qgis_label_placement and hasattr(qgis_label_placement, placement_name):
@@ -95,7 +180,8 @@ class CartographyService(BaseGeoAIService):
             if style_type != "single":
                 return self.error("Complex thematic styling should use dedicated tools")
 
-            style_dict = {key: str(value) for key, value in properties.items()}
+            style_dict = self._normalize_style_properties(properties, geom_type)
+            opacity_value = style_dict.pop("opacity", None)
             if geom_type == QgsWkbTypes.PointGeometry:
                 symbol = QgsMarkerSymbol.createSimple(style_dict)
             elif geom_type == QgsWkbTypes.LineGeometry:
@@ -105,13 +191,48 @@ class CartographyService(BaseGeoAIService):
             else:
                 return self.error("Unsupported geometry type for styling")
 
+            if opacity_value not in (None, ""):
+                try:
+                    opacity = float(opacity_value)
+                    if opacity > 1.0:
+                        opacity = opacity / 100.0
+                    opacity = max(0.0, min(1.0, opacity))
+                    symbol.setOpacity(opacity)
+                except Exception:
+                    pass
+
             layer.setRenderer(QgsSingleSymbolRenderer(symbol))
             self.refresh_layer(layer)
             if session:
                 self.register_layer_with_session(session, layer, owned=False, include_in_layout=True)
+            applied_style = self._serialize_symbol_style(symbol, geom_type)
             return self.success(
                 "Single symbol style applied",
+                data={"applied_style": applied_style},
                 artifacts=dict({"layer": self.artifact_for_layer(layer)}, **self.session_artifacts(session)),
+                applied_style=applied_style,
+                **self.artifact_for_layer(layer),
+            )
+        except Exception as exc:
+            return self.error(str(exc))
+
+    def get_layer_style(self, layer_id=None, layer_name=None):
+        try:
+            layer = self.require_vector_layer(layer_id=layer_id, layer_name=layer_name)
+            renderer = layer.renderer()
+            if not isinstance(renderer, QgsSingleSymbolRenderer):
+                return self.error(
+                    "Only single-symbol vector layers are currently supported for style inspection",
+                    data={"renderer_type": type(renderer).__name__ if renderer else ""},
+                )
+
+            symbol = renderer.symbol()
+            geom_type = layer.geometryType() if hasattr(layer, "geometryType") else None
+            style_summary = self._serialize_symbol_style(symbol, geom_type)
+            return self.success(
+                "Layer style inspected",
+                data=style_summary,
+                artifacts={"layer": self.artifact_for_layer(layer)},
                 **self.artifact_for_layer(layer),
             )
         except Exception as exc:
@@ -173,13 +294,20 @@ class CartographyService(BaseGeoAIService):
             legend.setTitle("Legend")
             legend.setLinkedMap(map_item)
             legend.setAutoUpdateModel(False)
-            try:
-                legend.model().setRootGroup(self.clone_session_layer_tree(session))
-            except Exception:
-                pass
             layout.addLayoutItem(legend)
             legend.attemptMove(QgsLayoutPoint(frame["legend"]["x"], frame["legend"]["y"], QgsUnitTypes.LayoutMillimeters))
             legend.attemptResize(QgsLayoutSize(frame["legend"]["width"], frame["legend"]["height"], QgsUnitTypes.LayoutMillimeters))
+            try:
+                def _apply_legend_root():
+                    cloned_root = self.project.layerTreeRoot().clone()
+                    allowed_ids = set(self.session_layer_ids(session))
+                    self.prune_layer_tree_to_allowed(cloned_root, allowed_ids)
+                    self.reorder_layer_tree(cloned_root, self.session_layer_ids(session))
+                    legend.model().setRootGroup(cloned_root)
+
+                self.call_in_main_thread(_apply_legend_root)
+            except Exception:
+                pass
 
             artifacts = self.session_artifacts(session)
             return self.success(
@@ -371,13 +499,20 @@ class CartographyService(BaseGeoAIService):
             legend.setTitle(title)
             legend.setAutoUpdateModel(bool(auto_update))
 
-            cloned_root = self.clone_session_layer_tree(session) if session else self.project.layerTreeRoot().clone()
-            self.remove_hidden_layers(cloned_root, hidden_layers or [])
-            self.reorder_layer_tree(cloned_root, layer_order or [])
-            try:
-                legend.model().setRootGroup(cloned_root)
-            except Exception:
-                pass
+            def _apply_legend_root():
+                cloned_root = self.project.layerTreeRoot().clone()
+                if session:
+                    allowed_ids = set(self.session_layer_ids(session))
+                    self.prune_layer_tree_to_allowed(cloned_root, allowed_ids)
+                    self.reorder_layer_tree(cloned_root, self.session_layer_ids(session))
+                self.remove_hidden_layers(cloned_root, hidden_layers or [])
+                self.reorder_layer_tree(cloned_root, layer_order or [])
+                try:
+                    legend.model().setRootGroup(cloned_root)
+                except Exception:
+                    pass
+
+            self.call_in_main_thread(_apply_legend_root)
 
             if isinstance(patch_size, dict):
                 if "width" in patch_size:
@@ -411,6 +546,7 @@ class CartographyService(BaseGeoAIService):
         self,
         layer_id=None,
         layer_name=None,
+        enabled=True,
         field=None,
         expression=None,
         font="Arial",
@@ -424,9 +560,22 @@ class CartographyService(BaseGeoAIService):
     ):
         try:
             layer = self.require_vector_layer(layer_id=layer_id, layer_name=layer_name)
+            session = self.ensure_map_session(map_session=map_session, create_new=False) if map_session else None
+
+            if not enabled:
+                layer.setLabelsEnabled(False)
+                layer.setLabeling(None)
+                self.refresh_layer(layer)
+                if session:
+                    self.register_layer_with_session(session, layer, owned=False, include_in_layout=True)
+                return self.success(
+                    "Layer labels disabled",
+                    artifacts=dict({"layer": self.artifact_for_layer(layer)}, **self.session_artifacts(session)),
+                    **self.artifact_for_layer(layer),
+                )
+
             if not expression:
                 self.require_field(layer, field)
-            session = self.ensure_map_session(map_session=map_session, create_new=False) if map_session else None
 
             settings = QgsPalLayerSettings()
             settings.enabled = True

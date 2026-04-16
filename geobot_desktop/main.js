@@ -223,6 +223,7 @@ async function apiFetch(method, route, body) {
 }
 
 ipcMain.handle("geobot:health", async () => apiFetch("GET", "/health"));
+ipcMain.handle("geobot:get-population-showcase", async () => apiFetch("GET", "/showcases/population"));
 ipcMain.handle("geobot:create-project", async (_event, payload) => apiFetch("POST", "/projects", payload || {}));
 ipcMain.handle("geobot:get-project", async (_event, projectId) => apiFetch("GET", `/projects/${projectId}`));
 ipcMain.handle("geobot:list-templates", async () => apiFetch("GET", "/templates"));

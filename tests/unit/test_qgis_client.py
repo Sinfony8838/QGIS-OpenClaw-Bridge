@@ -22,6 +22,49 @@ class RecordingQgisClient(QGISClient):
 
 
 class QgisClientTerrainToolTest(unittest.TestCase):
+    def test_set_layer_visibility_forwards_tool_name_and_params(self):
+        client = RecordingQgisClient()
+        response = client.set_layer_visibility(layer_name="china_population", visible=False)
+
+        self.assertEqual(client.calls[0][0], "set_layer_visibility")
+        self.assertEqual(client.calls[0][1]["layer_name"], "china_population")
+        self.assertFalse(client.calls[0][1]["visible"])
+        self.assertEqual(response["status"], "success")
+
+    def test_set_active_layer_forwards_tool_name_and_params(self):
+        client = RecordingQgisClient()
+        response = client.set_active_layer(layer_id="layer_demo")
+
+        self.assertEqual(client.calls[0][0], "set_active_layer")
+        self.assertEqual(client.calls[0][1]["layer_id"], "layer_demo")
+        self.assertEqual(response["status"], "success")
+    def test_set_layer_style_alias_forwards_to_set_style_tool(self):
+        client = RecordingQgisClient()
+        response = client.set_layer_style(layer_name="中国省份人口", fill_color="#ffff00", outline_color="#333333")
+
+        self.assertEqual(client.calls[0][0], "set_style")
+        self.assertEqual(client.calls[0][1]["layer_name"], "中国省份人口")
+        self.assertEqual(client.calls[0][1]["fill_color"], "#ffff00")
+        self.assertEqual(client.calls[0][1]["outline_color"], "#333333")
+        self.assertEqual(response["status"], "success")
+
+    def test_get_layer_style_forwards_tool_name_and_params(self):
+        client = RecordingQgisClient()
+        response = client.get_layer_style(layer_name="china_population")
+
+        self.assertEqual(client.calls[0][0], "get_layer_style")
+        self.assertEqual(client.calls[0][1]["layer_name"], "china_population")
+        self.assertEqual(response["status"], "success")
+
+    def test_set_layer_labels_forwards_enabled_flag(self):
+        client = RecordingQgisClient()
+        response = client.set_layer_labels(layer_name="china_population", enabled=False)
+
+        self.assertEqual(client.calls[0][0], "set_layer_labels")
+        self.assertEqual(client.calls[0][1]["layer_name"], "china_population")
+        self.assertFalse(client.calls[0][1]["enabled"])
+        self.assertEqual(response["status"], "success")
+
     def test_create_terrain_profile_forwards_tool_name_and_params(self):
         client = RecordingQgisClient()
         response = client.create_terrain_profile(

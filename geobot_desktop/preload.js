@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("geobotApi", {
   getHealth: () => ipcRenderer.invoke("geobot:health"),
+  getPopulationShowcase: () => ipcRenderer.invoke("geobot:get-population-showcase"),
   createProject: (payload) => ipcRenderer.invoke("geobot:create-project", payload),
   getProject: (projectId) => ipcRenderer.invoke("geobot:get-project", projectId),
   listTemplates: () => ipcRenderer.invoke("geobot:list-templates"),

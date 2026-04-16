@@ -25,6 +25,8 @@ def create_handler(runtime: GeoBotRuntime):
             try:
                 if path == "/health":
                     self._write_json(runtime.health())
+                elif path == "/showcases/population":
+                    self._write_json(runtime.get_population_showcase())
                 elif path == "/templates":
                     self._write_json(runtime.list_templates())
                 elif path.startswith("/projects/"):
@@ -58,7 +60,15 @@ def create_handler(runtime: GeoBotRuntime):
                 if path == "/projects":
                     self._write_json(runtime.create_project(name=payload.get("name"), metadata=payload.get("metadata")))
                 elif path == "/chat":
-                    self._write_json(runtime.submit_chat(project_id=payload["project_id"], message=payload["message"]), status=HTTPStatus.ACCEPTED)
+                    self._write_json(
+                        runtime.submit_chat(
+                            project_id=payload["project_id"],
+                            message=payload["message"],
+                            task_mode=payload.get("task_mode", ""),
+                            presentation_style=payload.get("presentation_style", ""),
+                        ),
+                        status=HTTPStatus.ACCEPTED,
+                    )
                 elif path.startswith("/templates/"):
                     template_id = path.split("/", 2)[2]
                     self._write_json(

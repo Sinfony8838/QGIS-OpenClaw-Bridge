@@ -23,7 +23,7 @@ Important session behavior:
 ## Core Tools
 
 ### `get_layers()`
-Returns the current project layers with IDs, providers, and CRS.
+Returns the current project layers with IDs, providers, CRS, `fields`, `geometry_type`, `is_visible`, `is_active`, `labels_enabled`, and `order_index`.
 
 ### `add_layer_from_path(file_path, layer_name="New Layer", map_session=None, role=None)`
 Loads a vector or raster layer from disk. When `map_session` is provided, the new layer is registered into that map session.
@@ -61,13 +61,34 @@ Creates centroids for a line or polygon layer and optionally registers them into
 ### `create_connection_lines(origins_layer, destinations_layer, origin_id_field, destination_id_field, output_name=None, map_session=None)`
 Builds connection lines between matched origin and destination features.
 
+### `set_layer_visibility(layer_name|layer_id, visible=True)`
+Shows or hides a layer in the current QGIS layer tree.
+
+### `set_active_layer(layer_name|layer_id)`
+Makes the target layer the active layer in the current QGIS session.
+
 ## Cartography Tools
 
 ### `set_style(layer_name|layer_id, style_type="single", map_session=None, **properties)`
 Applies a simple single-symbol renderer and optionally registers the layer into a session.
 
+### `set_layer_style(layer_name|layer_id, style_type="single", map_session=None, **properties)`
+Alias of `set_style()`. Prefer this when the user explicitly asks to restyle an existing current-project layer.
+
+- Style aliases are normalized before they reach QGIS.
+- Supported aliases include `fill_color -> color`, `stroke_color -> outline_color`, `stroke_width -> outline_width`, and `line_color -> color`.
+- For plain recolor requests such as "change the current layer to yellow", this is the correct tool. Do not switch to `apply_graduated_renderer()` or a thematic template.
+
+### `get_layer_style(layer_name|layer_id)`
+Returns a verifiable style summary for single-symbol vector layers.
+
+- Response data includes `renderer_type`, `fill_color`, `outline_color`, `line_color`, `line_width`, and `opacity`.
+- Use this after `set_style()` or `set_layer_style()` when the workflow requires post-action verification.
+
 ### `apply_graduated_renderer(layer_name|layer_id, field, mode="jenks", classes=5, color_ramp="Viridis", precision=2, label_format="{lower} - {upper}", map_session=None)`
 Applies graduated styling and optionally registers the layer into a session.
+
+- This is for thematic classification by a data field, not for a simple single-color restyle.
 
 ### `create_heatmap(layer_name|layer_id, radius=15, pixel_size=5, weight_field=None, output_mode="memory", map_session=None)`
 Creates a heatmap output and registers it into the session as a surface layer when `map_session` is supplied.
@@ -81,8 +102,10 @@ Creates the classic Hu Huanyong line.
 ### `generate_dynamic_hu_huanyong_line(layer_name|layer_id, weight_field, output_name="Hu Huanyong Comparison", target_share=0.94, angle_range_degrees=20, angle_steps=41, shift_steps=81, add_labels=True, map_session=None)`
 Fits a dynamic Hu Huanyong line and optionally registers it into a map session.
 
-### `set_layer_labels(layer_name|layer_id, field=None, expression=None, font="Arial", size=10, color="#1f2933", buffer_color="#ffffff", buffer_size=1.0, placement=None, scale_visibility=None, map_session=None)`
+### `set_layer_labels(layer_name|layer_id, enabled=True, field=None, expression=None, font="Arial", size=10, color="#1f2933", buffer_color="#ffffff", buffer_size=1.0, placement=None, scale_visibility=None, map_session=None)`
 Configures labels and optionally keeps the target layer inside a session-driven map.
+
+- Set `enabled=False` to disable labels directly without changing the renderer.
 
 ### `customize_layout_legend(layout_name="GeoAI_Output", title="Legend", layer_order=None, hidden_layers=None, patch_size=None, fonts=None, auto_update=False, map_session=None)`
 Customizes the legend of a layout. With `map_session`, the legend is derived only from that session's layers.

@@ -32,9 +32,57 @@ FIELD_TYPE_MAP = {
 
 
 class LayerService(BaseGeoAIService):
+    def _layer_order_index(self):
+        root = self.project.layerTreeRoot()
+        order = {}
+        counter = {"value": 0}
+
+        def collect(node):
+            for child in node.children():
+                if hasattr(child, "layerId"):
+                    layer_id = child.layerId()
+                    if layer_id:
+                        order[layer_id] = counter["value"]
+                        counter["value"] += 1
+                elif hasattr(child, "children"):
+                    collect(child)
+
+        if root:
+            collect(root)
+        return order
+
     def get_layers(self):
+        active_layer_id = ""
+        if self.iface:
+            try:
+                active_layer = self.iface.activeLayer()
+                active_layer_id = active_layer.id() if active_layer else ""
+            except Exception:
+                active_layer_id = ""
+
+        root = self.project.layerTreeRoot()
+        order_index = self._layer_order_index()
         layers = []
         for layer in self.project.mapLayers().values():
+            fields = []
+            if hasattr(layer, "fields"):
+                try:
+                    fields = [field.name() for field in layer.fields()]
+                except Exception:
+                    fields = []
+            layer_node = root.findLayer(layer.id()) if root else None
+            is_visible = True
+            if layer_node and hasattr(layer_node, "isVisible"):
+                try:
+                    is_visible = bool(layer_node.isVisible())
+                except Exception:
+                    is_visible = True
+            labels_enabled = False
+            if hasattr(layer, "labelsEnabled"):
+                try:
+                    labels_enabled = bool(layer.labelsEnabled())
+                except Exception:
+                    labels_enabled = False
             layers.append(
                 {
                     "name": layer.name(),
@@ -42,9 +90,33 @@ class LayerService(BaseGeoAIService):
                     "type": layer.type(),
                     "provider": layer.providerType() if hasattr(layer, "providerType") else None,
                     "crs": layer.crs().authid() if hasattr(layer, "crs") and layer.crs().isValid() else None,
+                    "fields": fields,
+                    "geometry_type": self._resolve_geometry_type(layer),
+                    "is_visible": is_visible,
+                    "is_active": layer.id() == active_layer_id,
+                    "labels_enabled": labels_enabled,
+                    "order_index": order_index.get(layer.id(), -1),
                 }
             )
         return self.success("Layers loaded", data=layers)
+
+    def _resolve_geometry_type(self, layer):
+        if isinstance(layer, QgsVectorLayer) and hasattr(layer, "geometryType"):
+            geometry_type = layer.geometryType()
+            if geometry_type == QgsWkbTypes.PointGeometry:
+                return "point"
+            if geometry_type == QgsWkbTypes.LineGeometry:
+                return "line"
+            if geometry_type == QgsWkbTypes.PolygonGeometry:
+                return "polygon"
+            return str(geometry_type)
+        if getattr(layer, "type", None) and callable(layer.type):
+            try:
+                if str(layer.type()).lower() == "1":
+                    return "raster"
+            except Exception:
+                pass
+        return ""
 
     def add_layer_from_path(self, file_path, layer_name="New Layer", map_session=None, role=None):
         if file_path.lower().endswith((".shp", ".geojson", ".gpkg", ".kml", ".tab")):
@@ -84,6 +156,52 @@ class LayerService(BaseGeoAIService):
             return self.success(
                 "Layer order updated",
                 data={"position": position},
+                artifacts={"layer": self.artifact_for_layer(layer)},
+                **self.artifact_for_layer(layer),
+            )
+        except Exception as exc:
+            return self.error(str(exc))
+
+    def set_layer_visibility(self, layer_id=None, layer_name=None, visible=True):
+        try:
+            layer = self.require_layer(layer_id=layer_id, layer_name=layer_name)
+
+            def _set_visibility():
+                root = self.project.layerTreeRoot()
+                layer_node = root.findLayer(layer.id()) if root else None
+                if not layer_node:
+                    raise ValueError("Layer tree node not found")
+                layer_node.setItemVisibilityChecked(bool(visible))
+                if self.iface:
+                    self.iface.layerTreeView().refreshLayerSymbology(layer.id())
+                    self.iface.mapCanvas().refresh()
+
+            self.call_in_main_thread(_set_visibility)
+            return self.success(
+                "Layer visibility updated",
+                data={"visible": bool(visible)},
+                artifacts={"layer": self.artifact_for_layer(layer)},
+                **self.artifact_for_layer(layer),
+            )
+        except Exception as exc:
+            return self.error(str(exc))
+
+    def set_active_layer(self, layer_id=None, layer_name=None):
+        try:
+            if not self.iface:
+                return self.error("QGIS interface is unavailable")
+            layer = self.require_layer(layer_id=layer_id, layer_name=layer_name)
+
+            def _activate():
+                self.iface.setActiveLayer(layer)
+                try:
+                    self.iface.layerTreeView().setCurrentLayer(layer)
+                except Exception:
+                    pass
+
+            self.call_in_main_thread(_activate)
+            return self.success(
+                "Active layer updated",
                 artifacts={"layer": self.artifact_for_layer(layer)},
                 **self.artifact_for_layer(layer),
             )
